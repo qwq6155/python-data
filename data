@@ -1,0 +1,100 @@
+import pandas as pd
+import numpy as np
+import io
+import matplotlib.pyplot as plt
+import seaborn as sns
+# 1. 模拟一份“脏”数据 (模拟真实业务场景：有缺失值，有格式问题)
+csv_data = """
+OrderID,Date,Product,Category,Price,Quantity,City
+1001,2023-01-01,Apple,Fruit,5.0,10,Beijing
+1002,2023-01-02,Milk,Dairy,12.5,5,Shanghai
+1003,2023-01-02,,Fruit,5.0,20,Beijing
+1004,2023-01-03,Bread,Bakery,7.0,,Shenzhen
+1005,2023-01-03,Apple,Fruit,5.0,15,Shanghai
+1006,2023-01-04,Banana,Fruit,3.5,10,Beijing
+1007,2023-01-05,Water,Beverage,2.0,50,
+1008,2023-01-05,Milk,Dairy,12.5,8,Shanghai
+"""
+
+# 使用 io.StringIO 模拟读取文件过程 (在实际项目中你会用 pd.read_csv('filename.csv'))
+df = pd.read_csv(io.StringIO(csv_data))
+
+# 2. 初步查看数据
+print("--- 前 5 行数据 (Head) ---")
+print(df.head())
+
+print("\n--- 数据基本信息 (Info) ---")
+print(df.info())
+
+print("\n--- 基础统计描述 (Describe) ---")
+print(df.describe())
+# 1. 备份数据 (好习惯：永远不要直接修改原始数据，万一改错了还能找回)
+df_clean = df.copy()
+
+# --- 处理步骤 ---
+
+# 策略一：Quantity (数量) 缺失，无法计算金额，风险太大 -> 删除整行
+# subset 参数指定：只看 Quantity 这一列，如果是空，就删掉对应的行
+df_clean = df_clean.dropna(subset=['Quantity'])
+
+# 策略二：Product (商品) 和 City (城市) 缺失 -> 填充为 "Unknown"
+# inplace=False 是默认的，所以我们要把结果重新赋值给列
+df_clean['Product'] = df_clean['Product'].fillna('Unknown')
+df_clean['City'] = df_clean['City'].fillna('Unknown')
+
+# --- 新增列 (Feature Engineering) ---
+
+# 现在数据干净了，我们来计算销售额 (Sales = Price * Quantity)
+df_clean['Sales'] = df_clean['Price'] * df_clean['Quantity']
+
+# --- 再次检查 ---
+print("--- 清洗后的数据 ---")
+print(df_clean)
+
+print("\n--- 现在的统计信息 ---")
+print(df_clean.info())
+
+# --- 场景 1：按 'City' 分组，算 'Sales' 的总和 (Sum) ---
+# 语法口诀：df.groupby('分谁')['算谁'].怎么算()
+city_sales = df_clean.groupby('City')['Sales'].sum()
+
+print("\n--- 1. 每个城市的总销售额 ---")
+print(city_sales)
+# 技巧：排序一下更好看
+print(city_sales.sort_values(ascending=False))
+
+
+# --- 场景 2：按 'Product' 分组，算 'Price' 的平均值 (Mean) ---
+product_price = df_clean.groupby('Product')['Price'].mean()
+
+print("\n--- 2. 每种商品的平均单价 ---")
+print(product_price)
+
+
+# --- 场景 3 (进阶)：同时算好几个指标 (Aggregation) ---
+# 面试加分项：用 .agg() 函数
+# 我们想看每个类别(Category)：总共卖了多少钱(sum)，以及有多少个订单(count)
+category_stats = df_clean.groupby('Category')['Sales'].agg(['sum', 'count'])
+
+print("\n--- 3. 各类别综合统计 ---")
+print(category_stats)
+
+# 1. 准备数据：把索引变回列 (还记得刚才说的 reset_index 吗？这里就用上了！)
+# 这样我们就有了一个包含 'City' 和 'Sales' 两列的表格，方便画图
+plot_data = city_sales.sort_values(ascending=False).reset_index()
+
+# 2. 设置画布大小 (宽 8, 高 5)
+plt.figure(figsize=(8, 5))
+
+# 3. 画柱状图 (x轴是城市，y轴是销售额)
+# palette='viridis' 是配色方案，会让图表看起来更专业
+#sns.barplot(x='City', y='Sales', data=plot_data, palette='viridis')
+sns.barplot(x='City', y='Sales', hue='City', legend=False, data=plot_data, palette='viridis')
+
+# 4. 加标题和标签
+plt.title('Total Sales by City (Top Performing Cities)')
+plt.xlabel('City')
+plt.ylabel('Total Sales ($)')
+
+# 5. 显示图表
+plt.show()
